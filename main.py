@@ -1,3 +1,8 @@
+# WISHLIST:
+# (1) auto detection of size when entering data
+# (2) checking that sum is correct at the end
+# (3) continue anyway if exceptions happen
+
 import numpy as np
 import scipy.linalg as la
 import numpy.linalg as nla
