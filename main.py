@@ -9,6 +9,12 @@ Matrix: type = np.array
 Vector: type = np.array
 MagicSquareValues: type = list[list[int | str]]
 
+class NoSolutionException(Exception):
+	pass
+
+class MultipleSolutionException(Exception):
+	pass
+
 def welcome_and_input_data() -> tuple[MagicSquareValues, Optional[int], int]:
 
 	print("\nWelcome to the Magic Square Solver!\n\n" +
@@ -68,6 +74,10 @@ def construct_matrix_A(ms_vals: MagicSquareValues, nv: int, sum_not_given: bool)
 	# adding a column of -1's if sum is not given
 	if sum_not_given:
 		A = np.column_stack([A, -1 * np.ones(2 * n + 2)])
+
+	if nla.cond(A) > 10 ** 15:
+		print("\nThis magic square has multiple solutions (i.e. the solution is not unique). Sorry!\n")
+		raise MultipleSolutionException
 	
 	return A
 
@@ -99,6 +109,18 @@ def solve_and_get_final_answer(ms_vals: MagicSquareValues, A: Matrix, b: Vector,
 	Q1, R1 = la.qr(A, mode = "economic")
 
 	x: Vector = la.solve(R1, Q1.T @ b) # using QR instead of A transpose * A controls the condition number better
+
+	# (1) check that x is an exact solution to Ax = b (rather than the least squares approximation)
+	# (2) check that x only contains strictly positive entries
+	# (3) check that x only contains integers
+	
+	if not np.allclose(A @ x, b) \
+	or any([entry < 0.9 for entry in x]) \
+	or not np.allclose(x, np.array([int(entry) for entry in x])):
+		
+		print("\nThis magic square does not have a solution that contains only positive integers. Sorry!\n")
+		raise NoSolutionException
+	
 	ms_solved: MagicSquareValues = deepcopy(ms_vals)
 	curr_index: int = -1
 
@@ -106,8 +128,11 @@ def solve_and_get_final_answer(ms_vals: MagicSquareValues, A: Matrix, b: Vector,
 		nonlocal curr_index
 		return int(x[curr_index := curr_index + 1] + 0.1) # 0.1 is to correct rounding errors in computer representation
 
+	ms_solved = [[(entry if type(entry) is int else next_x_value()) for entry in row] for row in ms_solved]
+	# TODO: check for duplicate entries
+	
 	sum_solved: Optional[int] = int(x[-1] + 0.1) if sum_not_given else None
-	return [[(entry if type(entry) is int else next_x_value()) for entry in row] for row in ms_solved], sum_solved
+	return ms_solved, sum_solved
 
 def print_formatted(ms: MagicSquareValues, ks: Optional[int]):
 
@@ -129,17 +154,20 @@ def print_formatted(ms: MagicSquareValues, ks: Optional[int]):
 
 def main():
 
-	magic_square_values: MagicSquareValues; const_sum: Optional[int]; num_vars: int
-	magic_square_values, const_sum, num_vars = welcome_and_input_data()
-	A: Matrix = construct_matrix_A(magic_square_values, num_vars, const_sum is None)
+	try:
 
-	if nla.cond(A) > 10 ** 15:
-		print("\nIt looks like this magic square has no unique solution. Sorry!\n")
-		return
-	
-	b: Vector = construct_vector_b(magic_square_values, const_sum)
-	magic_square_solved: MagicSquareValues; sum_solved: Optional[int]
-	magic_square_solved, sum_solved = solve_and_get_final_answer(magic_square_values, A, b, const_sum is None)
-	print_formatted(magic_square_solved, sum_solved)
+		magic_square_values: MagicSquareValues; const_sum: Optional[int]; num_vars: int
+		magic_square_values, const_sum, num_vars = welcome_and_input_data()
+		
+		A: Matrix = construct_matrix_A(magic_square_values, num_vars, const_sum is None)
+		b: Vector = construct_vector_b(magic_square_values, const_sum)
+		
+		magic_square_solved: MagicSquareValues; sum_solved: Optional[int]
+		magic_square_solved, sum_solved = solve_and_get_final_answer(magic_square_values, A, b, const_sum is None)
+		print_formatted(magic_square_solved, sum_solved)
+
+	except (MultipleSolutionException, NoSolutionException):
+		
+		pass # in the future maybe something more sophisticated can be done in these situations
 
 main()
