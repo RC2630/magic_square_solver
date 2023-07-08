@@ -15,6 +15,12 @@ class NoSolutionException(Exception):
 class MultipleSolutionException(Exception):
 	pass
 
+class DuplicateEntryException(Exception):
+	pass
+
+def int_precise(num: float) -> int:
+	return int(num + 0.1) # 0.1 is to correct rounding errors in computer representation
+
 def welcome_and_input_data() -> tuple[MagicSquareValues, Optional[int], int]:
 
 	print("\nWelcome to the Magic Square Solver!\n\n" +
@@ -116,7 +122,7 @@ def solve_and_get_final_answer(ms_vals: MagicSquareValues, A: Matrix, b: Vector,
 	
 	if not np.allclose(A @ x, b) \
 	or any([entry < 0.9 for entry in x]) \
-	or not np.allclose(x, np.array([int(entry) for entry in x])):
+	or not np.allclose(x, np.array([int_precise(entry) for entry in x])):
 		
 		print("\nThis magic square does not have a solution that contains only positive integers. Sorry!\n")
 		raise NoSolutionException
@@ -126,12 +132,17 @@ def solve_and_get_final_answer(ms_vals: MagicSquareValues, A: Matrix, b: Vector,
 
 	def next_x_value() -> int:
 		nonlocal curr_index
-		return int(x[curr_index := curr_index + 1] + 0.1) # 0.1 is to correct rounding errors in computer representation
+		return int_precise(x[curr_index := curr_index + 1])
 
 	ms_solved = [[(entry if type(entry) is int else next_x_value()) for entry in row] for row in ms_solved]
-	# TODO: check for duplicate entries
+	ms_solved_np: Matrix = np.array(ms_solved)
+	num_distinct: int = len({int_precise(entry) for entry in ms_solved_np.reshape(np.prod(ms_solved_np.shape))})
 	
-	sum_solved: Optional[int] = int(x[-1] + 0.1) if sum_not_given else None
+	if num_distinct != len(ms_solved) ** 2:
+		print("\nThe solution of this magic square contains duplicate entries. Sorry!\n")
+		raise DuplicateEntryException
+	
+	sum_solved: Optional[int] = int_precise(x[-1]) if sum_not_given else None
 	return ms_solved, sum_solved
 
 def print_formatted(ms: MagicSquareValues, ks: Optional[int]):
@@ -166,7 +177,7 @@ def main():
 		magic_square_solved, sum_solved = solve_and_get_final_answer(magic_square_values, A, b, const_sum is None)
 		print_formatted(magic_square_solved, sum_solved)
 
-	except (MultipleSolutionException, NoSolutionException):
+	except (MultipleSolutionException, NoSolutionException, DuplicateEntryException):
 		
 		pass # in the future maybe something more sophisticated can be done in these situations
 
