@@ -1,7 +1,5 @@
 # WISHLIST:
-# (1) auto detection of size when entering data
-# (2) checking that sum is correct at the end
-# (3) continue anyway if exceptions happen
+# (1) coloured output
 
 import numpy as np
 import scipy.linalg as la
@@ -17,6 +15,15 @@ MagicSquareValues: type = list[list[int | str]]
 class NoSolutionException(Exception):
 	pass
 
+class NoIntegerSolutionException(Exception):
+	pass
+
+class NegativeSolutionException(Exception):
+	pass
+
+class ZeroSolutionException(Exception):
+	pass
+
 class MultipleSolutionException(Exception):
 	pass
 
@@ -24,39 +31,52 @@ class DuplicateEntryException(Exception):
 	pass
 
 def int_precise(num: float) -> int:
-	return int(num + 0.1) # 0.1 is to correct rounding errors in computer representation
+	return int(num + (0.1 if num > 0 else -0.1)) # 0.1 is to correct rounding errors in computer representation
 
+def exception_case(message: str, exception_type: type):
+	if input(f"\n{message}\nWould you like to continue anyway? Enter \"yes\" or \"no\": ") != "yes":
+		print("\nThe program will now terminate.\n")
+		raise exception_type
+		
 def welcome_and_input_data() -> tuple[MagicSquareValues, Optional[int], int]:
 
 	print("\nWelcome to the Magic Square Solver!\n\n" +
-				"Please enter your incomplete magic square, with spaces separating entries in each row, and with one row per line.\n" +
-				"If an entry is not filled in, please enter \"?\" for that entry.\n" +
-			  "When you have finished entering all your rows, please enter \"done\".\n\n" +
+				"Please enter your incomplete magic square, with spaces separating entries in each row, " +
+				"and with one row per line.\n" +
+				"If an entry is not filled in, please enter \"?\" for that entry.\n\n" +
 			  "Enter your magic square below:\n")
 
 	curr_input: str = ""
 	raw_inputs: list[list[str]] = []
+	num_rows: Optional[int] = None
+	curr_row_num: int = 1
 	
-	while True:
+	while num_rows is None or curr_row_num <= num_rows:
 		
 		curr_input = input()
+		
 		if curr_input != "done":
-			raw_inputs.append(curr_input.split(" "))
+
+			curr_row: list[str] = curr_input.split(" ")
+			raw_inputs.append(curr_row)
+			curr_row_num += 1
 			
-		else:
+			if num_rows is None:
+				num_rows = len(curr_row)
 			
-			sum_raw: str = input("\nPlease enter the desired sum of each row, column, and diagonal.\n" + 
-													 "If the sum is not given, please enter \"?\".\n\n" + 
-													 "Enter the sum here: ")
-			
-			sum: Optional[int] = int(sum_raw) if sum_raw != "?" else None
-			variable_counter: int = 0
-			
-			def next_var_label() -> str:
-				nonlocal variable_counter
-				return "x" + str(variable_counter := variable_counter + 1)
-				
-			return [[(int(entry) if entry != "?" else next_var_label()) for entry in row] for row in raw_inputs], sum, variable_counter
+	sum_raw: str = input("\nPlease enter the desired sum of each row, column, and diagonal.\n" + 
+											 "If the sum is not given, please enter \"?\".\n\n" + 
+											 "Enter the sum here: ")
+	
+	sum: Optional[int] = int(sum_raw) if sum_raw != "?" else None
+	variable_counter: int = 0
+	
+	def next_var_label() -> str:
+		nonlocal variable_counter
+		return "x" + str(variable_counter := variable_counter + 1)
+		
+	return [[(int(entry) if entry != "?" else next_var_label()) for entry in row] \
+					for row in raw_inputs], sum, variable_counter
 
 def construct_matrix_A(ms_vals: MagicSquareValues, nv: int, sum_not_given: bool) -> Matrix:
 
@@ -86,9 +106,10 @@ def construct_matrix_A(ms_vals: MagicSquareValues, nv: int, sum_not_given: bool)
 	if sum_not_given:
 		A = np.column_stack([A, -1 * np.ones(2 * n + 2)])
 
+	# check that A does not have a condition number of "infinity" (which would indicate multiple solutions)
 	if nla.cond(A) > 10 ** 15:
-		print("\nThis magic square has multiple solutions (i.e. the solution is not unique). Sorry!\n")
-		raise MultipleSolutionException
+		exception_case("This magic square has multiple solutions (i.e. the solution is not unique).",
+									 MultipleSolutionException)
 	
 	return A
 
@@ -121,17 +142,16 @@ def solve_and_get_final_answer(ms_vals: MagicSquareValues, A: Matrix, b: Vector,
 
 	x: Vector = la.solve(R1, Q1.T @ b) # using QR instead of A transpose * A controls the condition number better
 
-	# (1) check that x is an exact solution to Ax = b (rather than the least squares approximation)
-	# (2) check that x only contains strictly positive entries
-	# (3) check that x only contains integers
-	
-	if not np.allclose(A @ x, b) \
-	or any([entry < 0.9 for entry in x]) \
-	or not np.allclose(x, np.array([int_precise(entry) for entry in x])):
+	# check that x is an exact solution to Ax = b (rather than the least squares approximation)
+	if not np.allclose(A @ x, b):
+		exception_case("This magic square does not have a solution.",
+									 NoSolutionException)
+
+	# check that x only contains integers
+	if not np.allclose(x, np.array([int_precise(entry) for entry in x])):
+		exception_case("This magic square does not have a solution that contains only integers.",
+									 NoIntegerSolutionException)
 		
-		print("\nThis magic square does not have a solution that contains only positive integers. Sorry!\n")
-		raise NoSolutionException
-	
 	ms_solved: MagicSquareValues = deepcopy(ms_vals)
 	curr_index: int = -1
 
@@ -142,10 +162,21 @@ def solve_and_get_final_answer(ms_vals: MagicSquareValues, A: Matrix, b: Vector,
 	ms_solved = [[(entry if type(entry) is int else next_x_value()) for entry in row] for row in ms_solved]
 	ms_solved_np: Matrix = np.array(ms_solved)
 	num_distinct: int = len({int_precise(entry) for entry in ms_solved_np.reshape(np.prod(ms_solved_np.shape))})
-	
+
+	# check that the magic square does not contain duplicate entries
 	if num_distinct != len(ms_solved) ** 2:
-		print("\nThe solution of this magic square contains duplicate entries. Sorry!\n")
-		raise DuplicateEntryException
+		exception_case("The solution of this magic square contains duplicate entries.",
+									 DuplicateEntryException)
+
+	# check that the magic square does not contain negative entries
+	if any([any([entry < 0 for entry in row]) for row in ms_solved]):
+		exception_case("This magic square does not have a solution that avoids negative entries.",
+									 NegativeSolutionException)
+
+	# check that the magic square does not contain 0 entries
+	if any([any([entry == 0 for entry in row]) for row in ms_solved]):
+		exception_case("This magic square does not have a solution that avoids 0 entries.",
+									 ZeroSolutionException)
 	
 	sum_solved: Optional[int] = int_precise(x[-1]) if sum_not_given else None
 	return ms_solved, sum_solved
@@ -166,6 +197,31 @@ def print_formatted(ms: MagicSquareValues, ks: Optional[int]):
 	if ks is not None:
 		print(f"The constant sum of this magic square is {ks}.\n")
 
+def check_sum(ms: MagicSquareValues, s: int):
+
+	SumInfo: type = tuple[str, int, int] # ex. ("row", 3, 40) means the sum of entries in row 3 is 40
+	sums: list[SumInfo] = []
+	n: int = len(ms)
+
+	for row in range(n):
+		sums.append(("row", row + 1, sum(ms[row])))
+
+	for col in range(n):
+		sums.append(("column", col + 1, sum([row[col] for row in ms])))
+
+	sums.append(("diagonal", 1, sum([ms[i][i] for i in range(n)])))
+	sums.append(("diagonal", 2, sum([ms[i][n - i - 1] for i in range(n)])))
+
+	check_failed: bool = False
+	for sum_info in sums:
+		if sum_info[2] != s:
+			check_failed = True
+			print(f"!!! CHECK FAILURE: The sum of the entries in {sum_info[0]} {sum_info[1]} " +
+						f"is {sum_info[2]} (not {s} as expected).")
+
+	if check_failed:
+		print()
+
 # --------------------------------
 
 def main():
@@ -180,9 +236,12 @@ def main():
 		
 		magic_square_solved: MagicSquareValues; sum_solved: Optional[int]
 		magic_square_solved, sum_solved = solve_and_get_final_answer(magic_square_values, A, b, const_sum is None)
-		print_formatted(magic_square_solved, sum_solved)
 
-	except (MultipleSolutionException, NoSolutionException, DuplicateEntryException):
+		print_formatted(magic_square_solved, sum_solved)
+		check_sum(magic_square_solved, const_sum if const_sum is not None else sum_solved)
+
+	except (NoSolutionException, NoIntegerSolutionException, NegativeSolutionException,
+					ZeroSolutionException, MultipleSolutionException, DuplicateEntryException):
 		
 		pass # in the future maybe something more sophisticated can be done in these situations
 
