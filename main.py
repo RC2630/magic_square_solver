@@ -1,9 +1,7 @@
-# WISHLIST:
-# (1) coloured output
-
 import numpy as np
 import scipy.linalg as la
 import numpy.linalg as nla
+import general.colour_util as cu
 
 from copy import deepcopy
 from typing import Optional
@@ -34,8 +32,10 @@ def int_precise(num: float) -> int:
 	return int(num + (0.1 if num > 0 else -0.1)) # 0.1 is to correct rounding errors in computer representation
 
 def exception_case(message: str, exception_type: type):
-	if input(f"\n{message}\nWould you like to continue anyway? Enter \"yes\" or \"no\": ") != "yes":
-		print("\nThe program will now terminate.\n")
+	if cu.input_coloured(f"\n{cu.ANSI_RED}{message}{cu.ANSI_NORMAL}\nWould you like to continue anyway? " +
+											 f"Enter {cu.ANSI_YELLOW}yes{cu.ANSI_NORMAL} or " +
+											 f"{cu.ANSI_YELLOW}no{cu.ANSI_NORMAL}: ", cu.ANSI_GREEN) != "yes":
+		print(f"{cu.ANSI_RED}\nThe program will now terminate.\n{cu.ANSI_NORMAL}")
 		raise exception_type
 		
 def welcome_and_input_data() -> tuple[MagicSquareValues, Optional[int], int]:
@@ -43,7 +43,7 @@ def welcome_and_input_data() -> tuple[MagicSquareValues, Optional[int], int]:
 	print("\nWelcome to the Magic Square Solver!\n\n" +
 				"Please enter your incomplete magic square, with spaces separating entries in each row, " +
 				"and with one row per line.\n" +
-				"If an entry is not filled in, please enter \"?\" for that entry.\n\n" +
+				f"If an entry is not filled in, please enter {cu.ANSI_YELLOW}?{cu.ANSI_NORMAL} for that entry.\n\n" +
 			  "Enter your magic square below:\n")
 
 	curr_input: str = ""
@@ -53,7 +53,7 @@ def welcome_and_input_data() -> tuple[MagicSquareValues, Optional[int], int]:
 	
 	while num_rows is None or curr_row_num <= num_rows:
 		
-		curr_input = input()
+		curr_input = cu.input_coloured("", cu.ANSI_GREEN)
 		
 		if curr_input != "done":
 
@@ -64,9 +64,9 @@ def welcome_and_input_data() -> tuple[MagicSquareValues, Optional[int], int]:
 			if num_rows is None:
 				num_rows = len(curr_row)
 			
-	sum_raw: str = input("\nPlease enter the desired sum of each row, column, and diagonal.\n" + 
-											 "If the sum is not given, please enter \"?\".\n\n" + 
-											 "Enter the sum here: ")
+	sum_raw: str = cu.input_coloured("\nPlease enter the desired sum of each row, column, and diagonal.\n" +
+																	 f"If the sum is not given, please enter {cu.ANSI_YELLOW}?{cu.ANSI_NORMAL}.\n\n" +
+																	 "Enter the sum here: ", cu.ANSI_GREEN)
 	
 	sum: Optional[int] = int(sum_raw) if sum_raw != "?" else None
 	variable_counter: int = 0
@@ -190,12 +190,12 @@ def print_formatted(ms: MagicSquareValues, ks: Optional[int]):
 
 	for row in padded:
 		for entry in row:
-			print(3 * " " + entry, end = "")
+			print(cu.ANSI_BLUE + 3 * " " + entry + cu.ANSI_NORMAL, end = "")
 		print()
 	print()
 
 	if ks is not None:
-		print(f"The constant sum of this magic square is {ks}.\n")
+		print(f"The constant sum of this magic square is {cu.ANSI_BLUE}{ks}{cu.ANSI_NORMAL}.\n")
 
 def check_sum(ms: MagicSquareValues, s: int):
 
@@ -216,8 +216,10 @@ def check_sum(ms: MagicSquareValues, s: int):
 	for sum_info in sums:
 		if sum_info[2] != s:
 			check_failed = True
-			print(f"!!! CHECK FAILURE: The sum of the entries in {sum_info[0]} {sum_info[1]} " +
-						f"is {sum_info[2]} (not {s} as expected).")
+			print(f"{cu.ANSI_RED}!!! CHECK FAILURE: " +
+						f"The sum of the entries in {cu.ANSI_BLUE}{sum_info[0]} {sum_info[1]}{cu.ANSI_RED} " +
+						f"is {cu.ANSI_BLUE}{sum_info[2]}{cu.ANSI_RED} " +
+						f"(not {cu.ANSI_BLUE}{s}{cu.ANSI_RED} as expected).{cu.ANSI_NORMAL}")
 
 	if check_failed:
 		print()
